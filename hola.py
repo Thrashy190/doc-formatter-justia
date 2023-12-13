@@ -5,28 +5,37 @@ import typer
 from PyInquirer import prompt
 from bs4 import BeautifulSoup
 from docx import Document
+from PIL import Image
 
 style_map = """
     p[style-name='Heading 2'] => strong.heading4:fresh
     p[style-name='Heading 3'] => strong.heading5:fresh
 """
 
-def extract_images(docx_file_path, output_folder):
+def extract_images(docx_file_path, output_folder,target_size=(300, 200)):
     document = Document(docx_file_path)
     image_count = 1
 
     for rel in document.part.rels.values():
         if "image" in rel.reltype and "media" in rel.target_ref:
             image_data = rel.target_part.blob
-            image_name = f"image_{image_count}.png"
+            image_name = f"image_{image_count}.jpg"
             image_path = os.path.join(output_folder, image_name)
 
             with open(image_path, "wb") as image_file:
                 image_file.write(image_data)
 
+            # Redimensionar la imagen
+            resize_image(image_path, target_size)
+            
             image_count += 1
 
-    return image_count - 1  # Return the total number of images
+    return image_count   # Return the total number of images
+
+def resize_image(image_path, target_size):
+    image = Image.open(image_path)
+    resized_image = image.resize(target_size)
+    resized_image.save(image_path)
 
 def find_closest_strong(tag):
     # Buscar hacia arriba en el árbol DOM para encontrar el elemento más cercano con la etiqueta strong
@@ -66,7 +75,7 @@ app = typer.Typer()
 
 @app.command()
 def start():
-    output_folder_path = "/Users/diegolopez/Documents/justia/SFP-69914-628"
+    output_folder_path = "/Users/diegolopez/Documents/justia/SFP-69914-628/html"
     documents_path = os.path.expanduser("~/Documents")
     not_formatted=[]
     formatted=[]
@@ -119,7 +128,7 @@ def start():
         os.mkdir(documents_path + "/justia/" + directory + "/html/")
         for entry in entries:
 
-            if entry.name=="html":
+            if entry.name=="html" or entry.name==".DS_Store":
                 continue
 
             print(entry.name)
@@ -135,19 +144,26 @@ def start():
             # Extract images and update img tags in HTML
             image_count = extract_images(docx_file.name, output_folder_path)
             soup = BeautifulSoup(process, "html.parser")
-            for img_tag in soup.find_all("img"):
+            for index,img_tag in enumerate(soup.find_all("img")):
                 # Buscar el elemento strong más cercano
-                closest_strong = find_closest_strong(img_tag)
 
-                # Usar el texto del strong como nombre de la imagen
-                img_name = f"image__{image_count + 1}.png"
-                #img_path = os.path.join(output_folder_path, img_name)
+                alt_text = img_tag.find_next("strong").get_text(strip=True)
+                next_text = "-".join(list(map(str.lower,img_tag.find_next("strong").get_text(strip=True).split(" "))))
+                print(next_text)
+                 # Usar el texto como nombre de la imagen
+                img_name = f"{next_text}.jpg"
+                img_path = os.path.join(output_folder_path, img_name)
 
+# width="300px" height="200px" amp-position="right" class="right amp-include"
                 # Agregar el atributo alt a la imagen con el texto del strong
-                img_tag["alt"] = closest_strong
+                img_tag["alt"] = alt_text
+                img_tag["width"] = "300"
+                img_tag["height"] = "200"
+                img_tag["amp-position"] = "right"
+                img_tag["class"] = "right amp-include"
 
                 # Renombrar la imagen
-                #os.rename(os.path.join(output_folder_path, f"image_{image_count}.png"), img_path)
+                os.rename(os.path.join(output_folder_path, f"image_{index+1}.jpg"), img_path)
                 img_tag["src"] = f"photos/{img_name}"
 
             # Save the modified HTML
