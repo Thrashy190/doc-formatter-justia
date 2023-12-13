@@ -7,7 +7,7 @@ Install python first
 Ativate de dev env in python 
 ```bash
 python -m venv formater-env
-source  formater-env/bin/activate
+source  content-generator-env/bin/activate
 ```
 
 Deactivate de env

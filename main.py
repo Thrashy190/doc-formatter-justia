@@ -6,14 +6,28 @@ import typer
 import subprocess
 from bs4 import BeautifulSoup
 
+
 style_map = """
     p[style-name='Heading 2'] => strong.heading4:fresh
-    p[style-name='Heading 3'] => strong:fresh
+    p[style-name='Heading 3'] => strong.heading5:fresh
 """
 def add_class_to_ul(html):
     soup = BeautifulSoup(html, 'html.parser')
-    for ul in soup.find_all('ul'):
-        ul['class'] = ['no-spacing-list']  # Agrega la clase a todas las listas no ordenadas
+
+    for ul_tag in soup.find_all('ul'):
+            should_exclude_class = False
+
+            # Verifica cada elemento <li> dentro del <ul>
+            for li_tag in ul_tag.find_all('li'):
+                # Verifica si la longitud del texto es mayor a 80 caracteres
+                if len(li_tag.get_text(strip=True)) > 80:
+                    should_exclude_class = True
+                    break  # No es necesario verificar los demás elementos si uno ya supera los 80 caracteres
+
+            # Agrega la clase solo si ningún <li> supera los 80 caracteres
+            if not should_exclude_class:
+                ul_tag['class'] = ul_tag.get('class', []) + ['no-spacing-list']
+
     return str(soup)
 
 def remove_a_id(html):
@@ -25,41 +39,76 @@ def remove_a_id(html):
     
     return str(soup)
 
-app = typer.Typer()
+#app = typer.Typer()
 
-@app.command()
+# @app.command()
 def start():
 
     documents_path = os.path.expanduser("~/Documents")
-    dirs=[]
+    not_formatted=[]
+    formatted=[]
+    data =[]
 
     with os.scandir(documents_path + '/justia/') as entries:
         for entry in entries:
-            dirs.append({"name":entry.name})
+            if entry.name == ".DS_Store" or entry.name=="code":
+                continue
+            with os.scandir(documents_path + '/justia/'+ entry.name + "/") as files:
+                data=[]
+                for file in files:
+                    data.append(file.name)  
+                if "html" in data:
+                    formatted.append({"name":entry.name})
+                else:
+                    not_formatted.append({"name":entry.name})
 
-    options = [
+    status = [
         {
             'type': 'list',
-            'name': 'dir',
-            'message': 'Select the directory',
-            'choices': dirs,
+            'name': 'status',
+            'message': 'Select the status of the directory',
+            'choices': [{"name":"New"},{"name":"Formatted"}],
         }
     ]
 
-    directory = prompt(options)["dir"]
+    formatted_options = [
+        {
+            'type': 'list',
+            'name': 'dir',
+            'message': 'Select the new directory',
+            'choices': formatted,
+        }
+    ]
 
-    print(directory)
+    not_formatted_options = [
+        {
+            'type': 'list',
+            'name': 'dir',
+            'message': 'Format again directory',
+            'choices': not_formatted,
+        }
+    ]
+
+    status = prompt(status)["status"]
+
+    if status == "New":
+        directory = prompt(not_formatted_options)["dir"]
+    else:
+        directory = prompt(formatted_options)["dir"]
+
 
     with os.scandir(documents_path + '/justia/' + directory + '/files') as entries:
         shutil.rmtree(documents_path + "/justia/" + directory + "/html/", ignore_errors=True)
         os.mkdir(documents_path + "/justia/" + directory + "/html/")
         for entry in entries:
 
+
             if entry.name=="html":
                 continue
 
             print(entry.name)
             with open(documents_path + '/justia/' + directory + '/files/'+entry.name, "rb") as docx_file:
+                print(docx_file)
                 result = mammoth.convert_to_html(docx_file.name,style_map=style_map)
 
             name = entry.name.replace(".docx",".html") 
@@ -71,9 +120,10 @@ def start():
             with open(documents_path + "/justia/" + directory + "/html/"+name, "w") as html_file:
                 html_file.write(process)
 
-@app.command()
-def hola():
-    print("hola")
+# @app.command()
+# def hola():
+#     print("hola")
 
 if __name__ == "__main__":
-    app()
+    # app()
+    start()
