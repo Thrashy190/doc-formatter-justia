@@ -1,8 +1,9 @@
 import os
 import mammoth
 import shutil
-import typer
-from PyInquirer import prompt
+import time
+# import typer
+# from PyInquirer import prompt
 from bs4 import BeautifulSoup
 from docx import Document
 from PIL import Image
@@ -15,7 +16,6 @@ style_map = """
 def extract_images(docx_file_path, output_folder,target_size=(300, 200)):
     document = Document(docx_file_path)
     image_count = 1
-
     for rel in document.part.rels.values():
         if "image" in rel.reltype and "media" in rel.target_ref:
             image_data = rel.target_part.blob
@@ -27,7 +27,7 @@ def extract_images(docx_file_path, output_folder,target_size=(300, 200)):
 
             # Redimensionar la imagen
             resize_image(image_path, target_size)
-            
+            print(f"Extracted image {image_count}: {image_name}")
             image_count += 1
 
     return image_count   # Return the total number of images
@@ -67,25 +67,28 @@ def remove_a_id(html):
     a_tags_with_id = soup.find_all('a', id=True)
     
     for a_tag in a_tags_with_id:
+        a_tag["target"] = "_blank"
         a_tag.extract()
     
     return str(soup)
 
-app = typer.Typer()
+# app = typer.Typer()
 
-@app.command()
+# @app.command()s
 def start():
-    output_folder_path = "/Users/diegolopez/Documents/justia/SFP-69914-628/html"
-    documents_path = os.path.expanduser("~/Documents")
+    directory = "abi"
+    documents_path = os.path.expanduser("~/Documents") + '/Personal/proyectos/justia/'
+    output_folder_path = documents_path + directory +"/html"
     not_formatted=[]
     formatted=[]
     data =[]
+    error = []
 
-    with os.scandir(documents_path + '/justia/') as entries:
+    with os.scandir(documents_path) as entries:
         for entry in entries:
             if entry.name == ".DS_Store" or entry.name=="code":
                 continue
-            with os.scandir(documents_path + '/justia/'+ entry.name + "/") as files:
+            with os.scandir(documents_path + entry.name + "/") as files:
                 data=[]
                 for file in files:
                     data.append(file.name)  
@@ -95,48 +98,24 @@ def start():
                     not_formatted.append({"name":entry.name})
 
 
-    status = prompt([
-        {
-            'type': 'list',
-            'name': 'status',
-            'message': 'Select the status of the directory',
-            'choices': [{"name":"New"},{"name":"Formatted"}],
-        }
-    ])["status"]
-
-    if status == "New":
-        directory = prompt([
-            {
-                'type': 'list',
-                'name': 'dir',
-                'message': 'Format again directory',
-                'choices': not_formatted,
-            }
-        ])["dir"]
-    else:
-        directory = prompt([
-            {
-                'type': 'list',
-                'name': 'dir',
-                'message': 'Select the new directory',
-                'choices': formatted,
-            }
-        ])["dir"]
-
-    with os.scandir(documents_path + '/justia/' + directory + '/files') as entries:
-        shutil.rmtree(documents_path + "/justia/" + directory + "/html/", ignore_errors=True)
-        os.mkdir(documents_path + "/justia/" + directory + "/html/")
+    with os.scandir(documents_path + directory + '/files') as entries:
+        shutil.rmtree(documents_path + directory + "/html/", ignore_errors=True)
+        os.mkdir(documents_path + directory + "/html/")
         for entry in entries:
 
             if entry.name=="html" or entry.name==".DS_Store":
                 continue
 
             print(entry.name)
-            with open(documents_path + '/justia/' + directory + '/files/'+entry.name, "rb") as docx_file:
+            with open(documents_path  + directory + '/files/'+entry.name, "rb") as docx_file:
                 result = mammoth.convert_to_html(docx_file.name, style_map=style_map)
 
             name = entry.name.replace(".docx",".html") 
             name = name.replace(" ","_")
+            
+            video ='<div class="video-wrapper"><iframe src="https://player.vimeo.com/video/718373605?h=544f9ab318&amp;title=0&amp;byline=0&amp;portrait=0" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen="" data-ready="true" width="100%"></iframe></div>'
+            # add video on the top of the file
+            result.value = video + result.value
 
             process = add_class_to_ul(result.value)
             process = remove_a_id(process)
@@ -144,14 +123,18 @@ def start():
             # Extract images and update img tags in HTML
             image_count = extract_images(docx_file.name, output_folder_path)
             soup = BeautifulSoup(process, "html.parser")
+
             for index,img_tag in enumerate(soup.find_all("img")):
                 # Buscar el elemento strong más cercano
-
                 alt_text = img_tag.find_next("strong").get_text(strip=True)
-                next_text = "-".join(list(map(str.lower,img_tag.find_next("strong").get_text(strip=True).split(" "))))
-                print(next_text)
+
+                next_text = "-".join(e for e in list(map(str.lower,img_tag.find_next("strong").get_text(strip=True).split(" "))) if e.isalpha)
+
+                if next_text == "frequently-asked-questions-(faqs)":
+                    img_name = f"{next_text}-{str(int(time.time()))}.jpg"
                  # Usar el texto como nombre de la imagen
-                img_name = f"{next_text}.jpg"
+                else:
+                    img_name = f"{next_text}.jpg"
                 img_path = os.path.join(output_folder_path, img_name)
 
 # width="300px" height="200px" amp-position="right" class="right amp-include"
@@ -163,16 +146,26 @@ def start():
                 img_tag["class"] = "right amp-include"
 
                 # Renombrar la imagen
-                os.rename(os.path.join(output_folder_path, f"image_{index+1}.jpg"), img_path)
+                try:
+                    os.rename(os.path.join(output_folder_path, f"image_{index+1}.jpg"), img_path)
+                except FileNotFoundError:
+                    error.append({"name":name,"image":index+1})
                 img_tag["src"] = f"photos/{img_name}"
 
             # Save the modified HTML
             html_output_path = os.path.join(output_folder_path, name)
             with open(html_output_path, "w", encoding="utf-8") as html_file:
                 html_file.write(str(soup))
+            
+        if len(error) > 0:
+            print("Error List")
+
+        for data in error:
+            print(f"File:{data['name']}, Image {data['image']} not found")
+            
 
 if __name__ == "__main__":
-    app()
+    start()
 
 
 
