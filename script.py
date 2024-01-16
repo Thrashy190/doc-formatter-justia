@@ -1,57 +1,45 @@
-import mammoth
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+import time
 import os
-import shutil
-import sys
-from bs4 import BeautifulSoup
 
-style_map = """
-    p[style-name='Heading 2'] => strong.heading4:fresh
-    p[style-name='Heading 3'] => strong.heading5:fresh
-"""
-def add_class_to_ul(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    for ul in soup.find_all('ul'):
-        ul['class'] = ['no-spacing-list']  # Agrega la clase a todas las listas no ordenadas
-    return str(soup)
+documents_path = os.path.expanduser("~/Documents")
 
-def remove_a_id(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    a_tags_with_id = soup.find_all('a', id=True)
-    
-    for a_tag in a_tags_with_id:
-        a_tag.extract()
-    
-    return str(soup)
+# Configuración del navegador
+driver = webdriver.Chrome()  # Asegúrate de tener el driver de Chrome instalado y su ruta en el PATH
+driver.get("https://ahrefs.com/writing-tools/img-alt-text-generator")  # Reemplaza 'URL_DE_TU_PAGINA' con la URL real
 
-def start(directory):
+# Carpeta con las imágenes
+carpeta_imagenes = documents_path + "/html/"  # Reemplaza 'RUTA_DE_TU_CARPETA' con la ruta real
 
-    with os.scandir(os.path.join(directory)) as entries:
-        shutil.rmtree(os.path.join(directory, 'html'), ignore_errors=True)
-        os.makedirs(os.path.join( directory, 'html'))
-        for entry in entries:
-            if entry.name == "html":
-                continue
+# Archivo de salida para los resultados
+archivo_resultados = "resultados.txt"
 
-            print(entry.name)
-            with open(os.path.join(directory, entry.name), "rb") as docx_file:
-                result = mammoth.convert_to_html(docx_file.name, style_map=style_map)
+# Itera sobre las imágenes en la carpeta
+for imagen_nombre in os.listdir(carpeta_imagenes):
+    # Ignorar archivos HTML
+    if not imagen_nombre.lower().endswith(('.html', '.htm')):
+        # Encuentra el campo de tipo archivo y el botón
+        div_contenedor = driver.find_element("div[data-hidden-mobile='true'][data-hidden-tablet='true'][data-hidden-desktop='true']")
+        campo_imagen = div_contenedor.find_element("input[type='file']")
+        boton_enviar = driver.find_element_by_css_selector('.css-ljl0n3-button.css-rxvlhs-buttonAlignContent.css-ohx8vg-buttonColor.css-1r4vxsw.css-emomfn')  # Reemplaza con tu clase CSS real
 
-            name = entry.name.replace(".docx", ".html")
-            name = name.replace(" ", "_")
+        # Ruta completa de la imagen
+        ruta_imagen = os.path.join(carpeta_imagenes, imagen_nombre)
 
-            process = add_class_to_ul(result.value)
-            process = remove_a_id(process)
+        # Cargar la imagen en el campo de tipo archivo
+        campo_imagen.send_keys(ruta_imagen)
 
-            with open(os.path.join(directory, 'html', name), "w") as html_file:
-                html_file.write(process)
+        # Enviar el formulario
+        boton_enviar.send_keys(Keys.RETURN)
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Uso: python script.py NOMBRE_DE_LA_CARPETA")
-        sys.exit(1)
-    directory = sys.argv[1]
-    print(directory)
+        # Esperar a que se cargue la página (puedes ajustar el tiempo según sea necesario)
+        time.sleep(5)
 
-    components = directory.split("/")
-    print(components)
-    #start(directory)
+        # Obtener el resultado y escribir en el archivo
+        resultado = driver.find_element_by_css_selector('TU_SELECTOR_DEL_RESULTADO').text  # Reemplaza 'TU_SELECTOR_DEL_RESULTADO' con el selector real
+        with open(archivo_resultados, "a") as f:
+            f.write(f"Imagen: {imagen_nombre}\nResultado: {resultado}\n\n")
+
+# Cerrar el navegador al final
+driver.quit()
