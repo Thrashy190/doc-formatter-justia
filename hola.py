@@ -189,6 +189,13 @@ def start():
             html_output_path = os.path.join(output_folder_path, name)
             with open(html_output_path, "w", encoding="utf-8") as html_file:
                 html_file.write(str(soup))
+            
+        if len(error) > 0:
+            print("Error List")
+
+        for data in error:
+            print(f"File:{data['name']}, Image {data['image']} not found")
+            
 
             count = 1 + count
         print("Paginas totales:" + str(count))  
