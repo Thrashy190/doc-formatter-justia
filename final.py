@@ -1,4 +1,5 @@
 import os
+import re
 import mammoth
 import shutil
 import time
@@ -8,12 +9,18 @@ from bs4 import BeautifulSoup
 from docx import Document
 from PIL import Image
 from urllib.parse import urlparse, urlunparse
+from progress.bar import Bar
+from alive_progress import alive_bar
 
 style_map = """
     p[style-name='Heading 2'] => strong.heading4:fresh
     p[style-name='Heading 3'] => strong.heading5:fresh
 """
 
+def remove_special_chars(string):
+    # Utilizamos una expresión regular para encontrar y eliminar caracteres especiales
+    cadena_sin_especiales = re.sub(r'[^a-zA-Z0-9 ]', '', string)
+    return cadena_sin_especiales
 
 def process_links(html_content):
     # Lógica para procesar las URLs en el contenido HTML
@@ -42,19 +49,21 @@ def process_links(html_content):
 def extract_images(docx_file_path, output_folder,target_size=(300, 200)):
     document = Document(docx_file_path)
     image_count = 1
-    for rel in document.part.rels.values():
-        if "image" in rel.reltype and "media" in rel.target_ref:
-            image_data = rel.target_part.blob
-            image_name = f"image_{image_count}.jpg"
-            image_path = os.path.join(output_folder, image_name)
+    with alive_bar(len([rel for rel in document.part.rels.values()  if "image" in rel.reltype and "media" in rel.target_ref])) as bar: 
+        for rel in document.part.rels.values():
+            if "image" in rel.reltype and "media" in rel.target_ref:
+                image_data = rel.target_part.blob
+                image_name = f"image_{image_count}.jpg"
+                image_path = os.path.join(output_folder, image_name)
 
-            with open(image_path, "wb") as image_file:
-                image_file.write(image_data)
+                with open(image_path, "wb") as image_file:
+                    image_file.write(image_data)
 
-            # Redimensionar la imagen
-            resize_image(image_path, target_size)
-            print(f"Extracted image {image_count}: {image_name}")
-            image_count += 1
+                # Redimensionar la imagen
+                resize_image(image_path, target_size)
+                ##print(f"Extracted image {image_count}: {image_name}")
+                image_count += 1
+                bar() 
 
     return image_count   # Return the total number of images
 
@@ -105,6 +114,7 @@ def start():
     directory = "YCZ-26719-954"
     documents_path = os.path.expanduser("~/Documents") + '/justia/'
     output_folder_path = documents_path + directory +"/html"
+    output_folder_img_path = documents_path + directory +"/img"
     not_formatted=[]
     formatted=[]
     data = []
@@ -128,12 +138,16 @@ def start():
     with os.scandir(documents_path + directory + '/files') as entries:
         shutil.rmtree(documents_path + directory + "/html/", ignore_errors=True)
         os.mkdir(documents_path + directory + "/html/")
+
+        shutil.rmtree(documents_path + directory + "/img/", ignore_errors=True)
+        os.mkdir(documents_path + directory + "/img/")
+        #with Bar('Processing...',max=len([entry for entry in os.listdir(documents_path + directory + '/files') if os.path.isfile(os.path.join(documents_path + directory + '/files', entry))])) as bar: 
         for entry in entries:
 
-            if entry.name=="html" or entry.name==".DS_Store":
+            if entry.name == "html" or entry.name == ".DS_Store" or entry.name == "img":
                 continue
 
-            print(entry.name)
+            print(f"\n{entry.name}")
             with open(documents_path  + directory + '/files/'+entry.name, "rb") as docx_file:
                 result = mammoth.convert_to_html(docx_file.name, style_map=style_map)
 
@@ -142,8 +156,8 @@ def start():
             
             video = """
                     <div class="responsive-video">
-	                    <div class="video-wrapper">
-		                    <iframe allow="autoplay; fullscreen; picture-in-picture" allowfullscreen="" data-ready="true" frameborder="0" src="https://player.vimeo.com/video/718373605?h=544f9ab318&amp;title=0&amp;byline=0&amp;portrait=0" width="100%" height="315"></iframe> 
+                        <div class="video-wrapper">
+                            <iframe allow="autoplay; fullscreen; picture-in-picture" allowfullscreen="" data-ready="true" frameborder="0" src="https://player.vimeo.com/video/718373605?h=544f9ab318&amp;title=0&amp;byline=0&amp;portrait=0" width="100%" height="315"></iframe> 
                         </div>
                     </div>
                     """
@@ -157,18 +171,19 @@ def start():
             
 
             # Extract images and update img tags in HTML
-            image_count = extract_images(docx_file.name, output_folder_path)
+            image_count = extract_images(docx_file.name, output_folder_img_path)
             soup = BeautifulSoup(process, "html.parser")
 
             for index,img_tag in enumerate(soup.find_all("img")):
                 # Buscar el elemento strong más cercano
                 alt_text = img_tag.find_next("strong").get_text(strip=True)
 
-                next_text = "-".join(e for e in list(map(str.lower,img_tag.find_next("strong").get_text(strip=True).split(" "))) if e.isalpha)
+                next_text = remove_special_chars(img_tag.find_next("strong").get_text(strip=True))
+                next_text = "-".join(e for e in list(map(str.lower,next_text.split(" "))))
                 time.sleep(1)
                 img_name = f"{next_text}-{str(int(time.time()))}.jpg"
-                 # Usar el texto como nombre de la imagen
-                img_path = os.path.join(output_folder_path, img_name)
+                # Usar el texto como nombre de la imagen
+                img_path = os.path.join(output_folder_img_path, img_name)
 
                 # width="300px" height="200px" amp-position="right" class="right amp-include"
                 # Agregar el atributo alt a la imagen con el texto del strong
@@ -180,7 +195,7 @@ def start():
 
                 # Renombrar la imagen
                 try:
-                    os.rename(os.path.join(output_folder_path, f"image_{index+1}.jpg"), img_path)
+                    os.rename(os.path.join(output_folder_img_path, f"image_{index+1}.jpg"), img_path)
                 except FileNotFoundError:
                     error.append({"name":name,"image":index+1})
                 img_tag["src"] = f"photos/{img_name}"
@@ -190,7 +205,9 @@ def start():
             with open(html_output_path, "w", encoding="utf-8") as html_file:
                 html_file.write(str(soup))
 
+            #bar.next() 
             count = 1 + count
+
         print("Paginas totales:" + str(count))  
         if len(error) > 0:
             print("Error List")
