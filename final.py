@@ -3,8 +3,6 @@ import re
 import mammoth
 import shutil
 import time
-# import typer
-# from PyInquirer import prompt
 from bs4 import BeautifulSoup
 from docx import Document
 from PIL import Image
@@ -22,7 +20,7 @@ def remove_special_chars(string):
     cadena_sin_especiales = re.sub(r'[^a-zA-Z0-9 ]', '', string)
     return cadena_sin_especiales
 
-def process_links(html_content):
+def process_links(html_content, site):
     # Lógica para procesar las URLs en el contenido HTML
     soup = BeautifulSoup(html_content, 'html.parser')
 
@@ -30,7 +28,7 @@ def process_links(html_content):
         href = a_tag.get('href', '')
 
         # Verifica si la URL contiene la cadena específica
-        if 'https://justia-moseleycollins-com.justia.net/' in href:
+        if site in href:
             # Elimina la parte no deseada y conserva la última parte de la ruta
             url_parts = list(urlparse(href))
             url_parts[1] = ''  # Elimina el esquema y la parte de red
@@ -49,21 +47,21 @@ def process_links(html_content):
 def extract_images(docx_file_path, output_folder,target_size=(300, 200)):
     document = Document(docx_file_path)
     image_count = 1
-    with alive_bar(len([rel for rel in document.part.rels.values()  if "image" in rel.reltype and "media" in rel.target_ref])) as bar: 
-        for rel in document.part.rels.values():
-            if "image" in rel.reltype and "media" in rel.target_ref:
-                image_data = rel.target_part.blob
-                image_name = f"image_{image_count}.jpg"
-                image_path = os.path.join(output_folder, image_name)
+    #with alive_bar(len([rel for rel in document.part.rels.values()  if "image" in rel.reltype and "media" in rel.target_ref])) as bar: 
+    for rel in document.part.rels.values():
+        if "image" in rel.reltype and "media" in rel.target_ref:
+            image_data = rel.target_part.blob
+            image_name = f"image_{image_count}.jpg"
+            image_path = os.path.join(output_folder, image_name)
 
-                with open(image_path, "wb") as image_file:
-                    image_file.write(image_data)
+            with open(image_path, "wb") as image_file:
+                image_file.write(image_data)
 
-                # Redimensionar la imagen
-                resize_image(image_path, target_size)
-                ##print(f"Extracted image {image_count}: {image_name}")
-                image_count += 1
-                bar() 
+            # Redimensionar la imagen
+            resize_image(image_path, target_size)
+            ##print(f"Extracted image {image_count}: {image_name}")
+            image_count += 1
+                #bar() 
 
     return image_count   # Return the total number of images
 
@@ -107,11 +105,37 @@ def remove_a_id(html):
     
     return str(soup)
 
-# app = typer.Typer()
+def capitalize_title(title):
+    # List of words that should not be capitalized
+    lowercase_words = ['a', 'an', 'the', 'on', 'in', 'and', 'or', 'to']
 
-# @app.command()s
+    # Split the title into words
+    words = title.split()
+
+    # Capitalize the first word
+    words[0] = words[0].capitalize()
+
+    # Capitalize specified words based on rules
+    for i in range(1, len(words)):
+        if len(words[i]) > 3 or '-' in words[i]:
+            words[i] = words[i].capitalize()
+
+    # Do not capitalize certain words
+    for i in range(1, len(words)):
+        if words[i].lower() in lowercase_words and i != 0:
+            words[i] = words[i].lower()
+
+    # Join the words back into a title
+    result = ' '.join(words)
+
+    return result
+
+
+
 def start():
-    directory = "YCZ-26719-954"
+    directory = "BFH-75833-986"
+    site = 'https://www.moseleycollins.com/'
+    #site = "https://www.reynoldsdefensefirm.com/"
     documents_path = os.path.expanduser("~/Documents") + '/justia/'
     output_folder_path = documents_path + directory +"/html"
     output_folder_img_path = documents_path + directory +"/img"
@@ -147,7 +171,7 @@ def start():
             if entry.name == "html" or entry.name == ".DS_Store" or entry.name == "img":
                 continue
 
-            print(f"\n{entry.name}")
+            print(f"{entry.name}")
             with open(documents_path  + directory + '/files/'+entry.name, "rb") as docx_file:
                 result = mammoth.convert_to_html(docx_file.name, style_map=style_map)
 
@@ -164,10 +188,11 @@ def start():
             # add video on the top of the file
             result.value = video + result.value
 
+
+
             process = add_class_to_ul(result.value)
             process = remove_a_id(process)
-
-            process = process_links(process)
+            process = process_links(process,site)
             
 
             # Extract images and update img tags in HTML
@@ -176,9 +201,12 @@ def start():
 
             for index,img_tag in enumerate(soup.find_all("img")):
                 # Buscar el elemento strong más cercano
-                alt_text = img_tag.find_next("strong").get_text(strip=True)
+                try:
+                    alt_text = img_tag.find_next("strong").get_text(strip=True)
+                except:
+                    alt_text = str(int(time.time()))
 
-                next_text = remove_special_chars(img_tag.find_next("strong").get_text(strip=True))
+                next_text = remove_special_chars(alt_text)
                 next_text = "-".join(e for e in list(map(str.lower,next_text.split(" "))))
                 time.sleep(1)
                 img_name = f"{next_text}-{str(int(time.time()))}.jpg"

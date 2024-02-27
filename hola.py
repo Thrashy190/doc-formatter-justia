@@ -102,7 +102,7 @@ def remove_a_id(html):
 
 # @app.command()s
 def start():
-    directory = "YCZ-26719-954"
+    directory = "EPZ-22161-666"
     documents_path = os.path.expanduser("~/Documents") + '/justia/'
     output_folder_path = documents_path + directory +"/html"
     not_formatted=[]
