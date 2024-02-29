@@ -1,5 +1,6 @@
 import os
 import re
+import datetime
 import mammoth
 import shutil
 import time
@@ -11,6 +12,8 @@ from progress.bar import Bar
 from alive_progress import alive_bar
 
 style_map = """
+    p[style-name='Heading 1'] => strong.heading1:fresh
+    p[style-name='Title'] => strong.heading1:fresh
     p[style-name='Heading 2'] => strong.heading4:fresh
     p[style-name='Heading 3'] => strong.heading5:fresh
 """
@@ -105,35 +108,238 @@ def remove_a_id(html):
     
     return str(soup)
 
+
+def search_titles(html):
+    soup = BeautifulSoup(html,"html.parser")
+    heading4_tags = soup.find_all("strong", {"class": "heading4"})
+    heading5_tags = soup.find_all("strong", {"class": "heading5"})
+
+    for heading in heading4_tags:
+        heading.string.replace_with(capitalize_title(heading.get_text()))
+    
+    for heading in heading5_tags:
+        heading.string.replace_with(capitalize_title(heading.get_text()))
+       
+    return soup
+
+
 def capitalize_title(title):
-    # List of words that should not be capitalized
-    lowercase_words = ['a', 'an', 'the', 'on', 'in', 'and', 'or', 'to']
+    """This is a function that capitalizes automatically H1 titles for pages and blog posts.
 
-    # Split the title into words
-    words = title.split()
+    We have two arrays :
 
-    # Capitalize the first word
-    words[0] = words[0].capitalize()
+        1. Exclusions: Words that, unless they're the first letter of the title, must not be capitalized.
+        2. Acronyms: Acronyms must always be capitalized so on this array we save acronyms I got from this site: https://www.justice.gov/nsd-ovt/us-government-acronym-list
 
-    # Capitalize specified words based on rules
-    for i in range(1, len(words)):
-        if len(words[i]) > 3 or '-' in words[i]:
-            words[i] = words[i].capitalize()
+    Args:
+        title (string): The only argument it takes is the title of the post or page as string.
 
-    # Do not capitalize certain words
-    for i in range(1, len(words)):
-        if words[i].lower() in lowercase_words and i != 0:
-            words[i] = words[i].lower()
+    Returns:
+        capitalized_heading (string): It returns as string the title correctly capitalized.
+    """
+    exclusions = [
+        "a",
+        "an",
+        "and",
+        "as",
+        "at",
+        "but",
+        "by",
+        "en",
+        "for",
+        "if",
+        "in",
+        "nor",
+        "of",
+        "on",
+        "or",
+        "per",
+        "the",
+        "to",
+        "v.",
+        "vs.",
+        "via",
+    ]
+    acronyms = [
+        "AAG",
+        "ACS",
+        "ADIC",
+        "AG",
+        "AG Guidelines",
+        "ALAT",
+        "ASAC",
+        "ASG",
+        "ATAC",
+        "ATF",
+        "AUSA",
+        "BOP",
+        "CCIPS",
+        "CEOS",
+        "CES",
+        "CFR",
+        "CIA",
+        "CIPA",
+        "CJPAF",
+        "CTS",
+        "CVRA",
+        "DAG",
+        "DEA",
+        "DOD",
+        "DOJ",
+        "DOS",
+        "DSS",
+        "DUI"
+        "DWI"
+        "EOUSA",
+        "EWAP",
+        "FAA",
+        "FARA",
+        "FAUSA",
+        "FBI",
+        "FIRS",
+        "FISA",
+        "FOIA",
+        "FY",
+        "GAO",
+        "GSA",
+        "HRSP",
+        "IC",
+        "ICITAP",
+        "INTERPOL",
+        "IRS",
+        "ITVERP",
+        "JFK",
+        "JM",
+        "JMD",
+        "JTTF",
+        "LEGAT",
+        "MLARS",
+        "MLAT",
+        "MOU",
+        "NCIS",
+        "NCTC",
+        "NSD",
+        "OARM",
+        "ODNI",
+        "OI",
+        "OIA",
+        "OIG",
+        "OIP",
+        "OJP",
+        "OLA",
+        "OLC",
+        "OLE",
+        "OMC",
+        "OMB",
+        "OPA",
+        "OPDAT",
+        "OPM",
+        "OPR",
+        "OSHA"
+        "OVC",
+        "OVT",
+        "SAC",
+        "SAUSA",
+        "SB",
+        "SG",
+        "STEP",
+        "UCMJ",
+        "USA",
+        "USAOs",
+        "USC",
+        "USDC",
+        "USMS",
+        "USSG",
+        "USVSST",
+        "VA",
+        "VOCA",
+        "VRRA",
+        "VSD",
+        "VTC",
+        "VWA",
+        "VWC",
+    ]
+    # We turn all words of the title lowercased and convert it into an array of words.
+    words = title.lower().split(" ")
 
-    # Join the words back into a title
-    result = ' '.join(words)
+    # Empty array on which we'll store our modified words.
+    capitalized_heading = []
 
-    return result
+    # If the title has a '.' at the end of the last word, it gets removed since headings should not have '.'
+    if words[-1].endswith("."):
+        words[-1] = words[-1][:-1]
 
+    # We iterate over every word of the title.
+    for i in range(len(words)):
+        # We capitalize the first letter of each title and append it into our capitalized_heading array.
+        if i == 0:
+            capitalized_heading.append(words[i].capitalize())
+
+        # We check if any word has a hyphen as in a-b and capitalize both 'parts' of the hyphenated words append it into our capitalized_heading array.
+        elif "-" in words[i]:
+            parts = words[i].split("-")
+            capitalized_parts = [part.capitalize() for part in parts]
+            words[i] = "-".join(capitalized_parts)
+            capitalized_heading.append(words[i])
+
+        # Check if the word is not on the exclusions array and if true, then it capitalize the word and append it into our capitalized_heading array.
+        elif words[i] not in exclusions:
+            capitalized_heading.append(words[i].capitalize())
+
+        # If the word did not meet the conditions above it's appended into our capitalized_heading array.
+        else:
+            capitalized_heading.append(words[i])
+
+    # Here we iterate over our capitalize heading to check for acronyms on each word and colons on the title.
+    for i in range(len(capitalized_heading)):
+        # Here we check if indeed an acronym is found uppercasing the word of the array and looking for it on the acronyms array and only then we capitalize it.
+        if capitalized_heading[i].upper() in acronyms:
+            capitalized_heading[i] = capitalized_heading[i].upper()
+
+        # Checks if a colon is at the end of any word and if the very next word is on the exclusions it's capitalized
+        if (
+            capitalized_heading[i].endswith(":")
+            and capitalized_heading[i + 1] in exclusions
+        ):
+            capitalized_heading[i + 1] = capitalized_heading[i + 1].capitalize()
+
+    # Join the array into a string separated by spaces.
+    return " ".join(capitalized_heading)
+
+
+def get_h1_heading(html):
+    soup = BeautifulSoup(html,"html.parser")
+    heading1 = soup.find("strong",{"class": "heading1"})
+    text = heading1.get_text(strip=True)
+
+    soup.find("strong",{"class": "heading1"}).decompose()
+
+    return text
+
+
+def fix_strong_heading(file_name, html):
+    # Patrón a buscar en el HTML
+    patron = re.compile(r'<p>\s*<strong>(.*?)</strong>\s*</p>')
+
+    # Nueva etiqueta a reemplazar
+    nueva_etiqueta = '<strong class="heading5">\\1</strong>'
+
+    # Función para registrar el hallazgo del patrón
+    def log_hallazgo():
+        now = datetime.datetime.now()
+        with open("logfile.log", "a") as log_file:
+            log_file.write(f"[{now}] - {file_name} - Bad format for subheading strong title\n")
+
+    # Buscar el patrón en el HTML y reemplazarlo
+    html_modificado, num_reemplazos = re.subn(patron, nueva_etiqueta, html)
+    if num_reemplazos > 0:
+        log_hallazgo()
+
+    return html
 
 
 def start():
-    directory = "BFH-75833-986"
+    directory = "test"
     site = 'https://www.moseleycollins.com/'
     #site = "https://www.reynoldsdefensefirm.com/"
     documents_path = os.path.expanduser("~/Documents") + '/justia/'
@@ -178,6 +384,9 @@ def start():
             name = entry.name.replace(".docx",".html") 
             name = name.replace(" ","_")
             
+
+            
+
             video = """
                     <div class="responsive-video">
                         <div class="video-wrapper">
@@ -186,18 +395,20 @@ def start():
                     </div>
                     """
             # add video on the top of the file
-            result.value = video + result.value
+            result.value = get_h1_heading(result.value) + video + result.value
 
+            result.value = search_titles(result.value)
 
+            #result.value = fix_strong_heading(name,str(result.value))
 
-            process = add_class_to_ul(result.value)
-            process = remove_a_id(process)
-            process = process_links(process,site)
+            result.value = add_class_to_ul(str(result.value))
+            result.value = remove_a_id(result.value)
+            result.value = process_links(result.value,site)
             
 
             # Extract images and update img tags in HTML
             image_count = extract_images(docx_file.name, output_folder_img_path)
-            soup = BeautifulSoup(process, "html.parser")
+            soup = BeautifulSoup(result.value, "html.parser")
 
             for index,img_tag in enumerate(soup.find_all("img")):
                 # Buscar el elemento strong más cercano
@@ -231,7 +442,7 @@ def start():
             # Save the modified HTML
             html_output_path = os.path.join(output_folder_path, name)
             with open(html_output_path, "w", encoding="utf-8") as html_file:
-                html_file.write(str(soup))
+                html_file.write(str(soup.prettify()))
 
             #bar.next() 
             count = 1 + count
