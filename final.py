@@ -299,7 +299,7 @@ def capitalize_title(title):
         # Checks if a colon is at the end of any word and if the very next word is on the exclusions it's capitalized
         if (
             capitalized_heading[i].endswith(":")
-            and capitalized_heading[i + 1] in exclusions
+            and capitalized_heading[i - 1] in exclusions
         ):
             capitalized_heading[i + 1] = capitalized_heading[i + 1].capitalize()
 
@@ -339,7 +339,7 @@ def fix_strong_heading(file_name, html):
 
 
 def start():
-    directory = "test"
+    directory = "ATU-31648-574"
     site = 'https://www.moseleycollins.com/'
     #site = "https://www.reynoldsdefensefirm.com/"
     documents_path = os.path.expanduser("~/Documents") + '/justia/'
@@ -397,9 +397,9 @@ def start():
             # add video on the top of the file
             result.value = get_h1_heading(result.value) + video + result.value
 
-            result.value = search_titles(result.value)
+            #result.value = search_titles(result.value)
 
-            #result.value = fix_strong_heading(name,str(result.value))
+            result.value = fix_strong_heading(name,str(result.value))
 
             result.value = add_class_to_ul(str(result.value))
             result.value = remove_a_id(result.value)
@@ -442,7 +442,7 @@ def start():
             # Save the modified HTML
             html_output_path = os.path.join(output_folder_path, name)
             with open(html_output_path, "w", encoding="utf-8") as html_file:
-                html_file.write(str(soup.prettify()))
+                html_file.write(str(soup))
 
             #bar.next() 
             count = 1 + count
